@@ -3,6 +3,8 @@ extern crate ggez;
 use ggez::{ContextBuilder};
 use ggez::event;
 
+mod cell;
+
 mod mygame;
 use mygame::GameOfLife;
 
