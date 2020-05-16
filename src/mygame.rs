@@ -61,7 +61,7 @@ impl GameOfLife {
             cell_height,
             cols,
             rows,
-            cells: Self::generate_cells(2, cols, rows),
+            cells: Self::generate_cells(15, cols, rows),
             cells_next_life: vec![Cell::new(false); (cols * rows) as usize],
             cell_mesh,
             mouse: Default::default(),
@@ -177,7 +177,7 @@ impl EventHandler for GameOfLife {
         // Update code here...
         self.next();
 
-        if input::mouse::button_released(ctx, input::mouse::MouseButton::Left) {
+        if input::mouse::button_pressed(ctx, input::mouse::MouseButton::Left) {
             if input::mouse::position(ctx) != self.mouse.relative_position() {
                 self.mouse.set_position(input::mouse::position(ctx));
                 let mouse_position = self.mouse.grid_position(self.cell_width as f32, self.cell_height as f32);
