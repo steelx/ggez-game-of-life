@@ -52,6 +52,8 @@ impl GameOfLife {
             ("sw", (-1, 1)),
             ("w", (-1, 0)),
             ("nw", (-1, -1)),
+            ("e+1", (2, 0)),
+            ("w+1", (-2, 0)),
         ].iter().cloned().collect();
 
         GameOfLife {
@@ -59,7 +61,7 @@ impl GameOfLife {
             cell_height,
             cols,
             rows,
-            cells: Self::generate_cells(30, cols, rows),
+            cells: Self::generate_cells(2, cols, rows),
             cells_next_life: vec![Cell::new(false); (cols * rows) as usize],
             cell_mesh,
             mouse: Default::default(),
@@ -175,7 +177,7 @@ impl EventHandler for GameOfLife {
         // Update code here...
         self.next();
 
-        if input::mouse::button_pressed(ctx, input::mouse::MouseButton::Left) {
+        if input::mouse::button_released(ctx, input::mouse::MouseButton::Left) {
             if input::mouse::position(ctx) != self.mouse.relative_position() {
                 self.mouse.set_position(input::mouse::position(ctx));
                 let mouse_position = self.mouse.grid_position(self.cell_width as f32, self.cell_height as f32);
@@ -184,10 +186,16 @@ impl EventHandler for GameOfLife {
                 let (x, y) = (mouse_position.x as usize, mouse_position.y as usize);
                 self.add_cell_on_grid(x, y);
 
+                //after add_cell_on_grid
+                //below counts from that cell
                 if input::keyboard::is_mod_active(ctx, input::keyboard::KeyMods::SHIFT) {
-
+                    self.add_pattern(x, y, "e+1 s s s s w+1 w+1 n n n n");//exploder pattern
+                }
+                if input::keyboard::is_mod_active(ctx, input::keyboard::KeyMods::CTRL) {
                     self.add_pattern(x, y, "se s w w");//glider pattern
-
+                }
+                if input::keyboard::is_mod_active(ctx, input::keyboard::KeyMods::ALT) {
+                    self.add_pattern(x, y, "s s e ne n n n w n e e+1 e s w s s s se e n n");//tumbler pattern
                 }
 
             }
