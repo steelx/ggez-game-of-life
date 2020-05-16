@@ -9,7 +9,7 @@ mod mygame;
 use mygame::GameOfLife;
 
 fn main() {
-    let window_mode = ggez::conf::WindowMode::default().dimensions(600.0, 600.0);
+    let window_mode = ggez::conf::WindowMode::default().dimensions(800.0, 600.0);
 
     // Make a Context.
     let (mut ctx, mut event_loop) = ContextBuilder::new("GOL_Rust", "Ajinkya Borade")

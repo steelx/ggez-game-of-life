@@ -1,5 +1,5 @@
 use ggez::{graphics, Context, GameResult};
-use ggez::event::{EventHandler, Axis, Button, GamepadId, KeyCode, KeyMods, MouseButton};
+use ggez::event::{EventHandler};
 use ggez::mint::Point2;
 use ggez::input;
 use std::collections::HashMap;
@@ -14,12 +14,11 @@ pub struct GameOfLife {
     rows: usize,
     cell_width: usize,
     cell_height: usize,
-    grid_line_vertical: graphics::Mesh,
-    grid_line_horizontal: graphics::Mesh,
     cells: Vec<Cell>,
     cells_next_life: Vec<Cell>,
     cell_mesh: graphics::Mesh,
     mouse: Mouse,
+    directions: HashMap<&'static str, (i8, i8)>,
 }
 
 impl GameOfLife {
@@ -27,24 +26,10 @@ impl GameOfLife {
         // Load/create resources such as images here.
 
         let (win_width, win_height) = graphics::drawable_size(ctx);
-        let cols: usize = 50;
-        let rows: usize = 50;
+        let cols: usize = 60;
+        let rows: usize = 60;
         let cell_width = win_width as usize / cols;
         let cell_height = win_height as usize / rows;
-
-        let rect = graphics::Rect::new(0.0, 0.0, 1.0, win_height);
-        let rect2 = graphics::Rect::new(0.0, 0.0, win_width, 1.0);
-        let color = graphics::Color::from_rgb(220, 220, 220);
-        let grid_line_vertical = match graphics::Mesh::new_rectangle(ctx, graphics::DrawMode::fill(), rect, color) {
-            Ok(mesh) => mesh,
-            Err(_e) => panic!("Could not create grid_line_vertical")
-        };
-
-        let grid_line_horizontal = match graphics::Mesh::new_rectangle(ctx, graphics::DrawMode::fill(), rect2, color) {
-            Ok(mesh) => mesh,
-            Err(_e) => panic!("Could not create grid_line_vertical")
-        };
-
 
 
         let cell_mesh_rect = graphics::Rect::new(0.0, 0.0, cell_width as f32, cell_height as f32);
@@ -58,21 +43,31 @@ impl GameOfLife {
             Err(_e) => panic!("Could not create cell_mesh")
         };
 
+        let directions: HashMap<&'static str, (i8, i8)> = [
+            ("n", (0, -1)),
+            ("ne", (1, -1)),
+            ("e", (1, 0)),
+            ("se", (1, 1)),
+            ("s", (0, 1)),
+            ("sw", (-1, 1)),
+            ("w", (-1, 0)),
+            ("nw", (-1, -1)),
+        ].iter().cloned().collect();
+
         GameOfLife {
             cell_width,
             cell_height,
             cols,
             rows,
-            grid_line_vertical,
-            grid_line_horizontal,
-            cells: Self::generate_cells(30, cols, rows, cell_width, cell_height),
+            cells: Self::generate_cells(30, cols, rows),
             cells_next_life: vec![Cell::new(false); (cols * rows) as usize],
             cell_mesh,
             mouse: Default::default(),
+            directions,
         }
     }
 
-    fn generate_cells(percent: usize, cols: usize, rows: usize, cell_width: usize, cell_height: usize) -> Vec<Cell> {
+    fn generate_cells(percent: usize, cols: usize, rows: usize) -> Vec<Cell> {
         assert!(percent <= 100, "percent must be between 00 and 100");
 
         let mut cells = vec![Cell::new(false); (cols * rows) as usize];
@@ -113,6 +108,10 @@ impl GameOfLife {
         self.is_inside((x+dir.0) as usize, (y+dir.1) as usize) && self.get_cell((x+dir.0) as usize, (y+dir.1) as usize)
     }
 
+    fn add_cell_at_direction(&mut self, x: i8, y: i8, dir: (i8, i8)) {
+        self.set_cell((x+dir.0) as usize, (y+dir.1) as usize, true);
+    }
+
     fn get_cell(&self, x: usize, y: usize) -> bool {
         self.cells[(x+(y*self.cols)) as usize].alive
     }
@@ -125,20 +124,10 @@ impl GameOfLife {
 
     /// find_neighbours of given co-ordinates
     fn find_neighbours(&self, x: usize, y: usize) -> i8 {
-        let directions: HashMap<&'static str, (i8, i8)> = [
-            ("n", (0, -1)),
-            ("ne", (1, -1)),
-            ("e", (1, 0)),
-            ("se", (1, 1)),
-            ("s", (0, 1)),
-            ("sw", (-1, 1)),
-            ("w", (-1, 0)),
-            ("nw", (-1, -1)),
-        ].iter().cloned().collect();
 
         let mut count: i8 = 0;
-        for dir in direction_names() {
-            if self.look(x, y, directions[dir]) {
+        for dir in direction_names(DIRECTIONS_ALL) {
+            if self.look(x, y, self.directions[dir]) {
                 count += 1;
             }
         }
@@ -161,6 +150,24 @@ impl GameOfLife {
         self.cells = self.cells_next_life.clone();
     }
 
+    fn add_cell_on_grid(&mut self, x: usize, y: usize) {
+        if self.is_inside(x, y) {
+            self.set_cell(x, y, true);
+        }
+    }
+
+    fn add_pattern(&mut self, x: usize, y: usize, directions_follow_pattern: &'static str) {
+        let (mut x1, mut y1) = (x as i8, y as i8);
+        for dir in direction_names(directions_follow_pattern) {
+            if !self.look(x1 as usize, y1 as usize, self.directions[dir]) {
+                let direction = self.directions[dir];
+                self.add_cell_at_direction(x1, y1, direction);
+                x1 = x1 + direction.0;
+                y1 = y1 + direction.1;
+            }
+        }
+    }
+
 }
 
 impl EventHandler for GameOfLife {
@@ -172,12 +179,17 @@ impl EventHandler for GameOfLife {
             if input::mouse::position(ctx) != self.mouse.relative_position() {
                 self.mouse.set_position(input::mouse::position(ctx));
                 let mouse_position = self.mouse.grid_position(self.cell_width as f32, self.cell_height as f32);
-                println!("button pressed x: {}, y: {}", mouse_position.x, mouse_position.y);
+                // println!("button pressed x: {}, y: {}", mouse_position.x, mouse_position.y);
 
                 let (x, y) = (mouse_position.x as usize, mouse_position.y as usize);
-                if self.is_inside(x, y) {
-                    self.set_cell(x, y, true);
+                self.add_cell_on_grid(x, y);
+
+                if input::keyboard::is_mod_active(ctx, input::keyboard::KeyMods::SHIFT) {
+
+                    self.add_pattern(x, y, "se s w w");//glider pattern
+
                 }
+
             }
         }
 
@@ -186,16 +198,6 @@ impl EventHandler for GameOfLife {
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
         graphics::clear(ctx, graphics::WHITE);
-
-        // Draw code here...
-        for tile_size in 0..self.cols {
-            let bounds = graphics::DrawParam::default().dest(Point2{x:(tile_size * self.cell_width) as f32, y:0.0});
-            graphics::draw(ctx, &self.grid_line_vertical, bounds)?;
-
-            let bounds = graphics::DrawParam::default()
-                .dest(Point2{x:0.0, y:(tile_size * self.cell_height) as f32});
-            graphics::draw(ctx, &self.grid_line_horizontal, bounds)?;
-        }
 
         //draw cells
         for x in 0..self.cols {
@@ -215,10 +217,10 @@ impl EventHandler for GameOfLife {
 
 
 
-const DIRECTION_NAMES: &'static str = "n ne e se s sw w nw";
+const DIRECTIONS_ALL: &'static str = "n ne e se s sw w nw";
 
-pub fn direction_names() -> Vec<&'static str> {
-    DIRECTION_NAMES
+pub fn direction_names(directions: &'static str) -> Vec<&'static str> {
+    directions
         .split(" ")
         // .map(|c| c.to_string())
         .collect::<Vec<&str>>()
