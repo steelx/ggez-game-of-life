@@ -4,7 +4,7 @@ use ggez::{ContextBuilder};
 use ggez::event;
 
 mod cell;
-
+mod mouse;
 mod mygame;
 use mygame::GameOfLife;
 

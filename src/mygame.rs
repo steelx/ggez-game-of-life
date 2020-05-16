@@ -1,11 +1,13 @@
 use ggez::{graphics, Context, GameResult};
-use ggez::event::{EventHandler};
-use ggez::nalgebra::Point2;
+use ggez::event::{EventHandler, Axis, Button, GamepadId, KeyCode, KeyMods, MouseButton};
+use ggez::mint::Point2;
+use ggez::input;
 use std::collections::HashMap;
 
 extern crate rand;
 use rand::Rng;
 use crate::cell::Cell;
+use crate::mouse::Mouse;
 
 pub struct GameOfLife {
     cols: usize,
@@ -15,7 +17,9 @@ pub struct GameOfLife {
     grid_line_vertical: graphics::Mesh,
     grid_line_horizontal: graphics::Mesh,
     cells: Vec<Cell>,
+    cells_next_life: Vec<Cell>,
     cell_mesh: graphics::Mesh,
+    mouse: Mouse,
 }
 
 impl GameOfLife {
@@ -62,7 +66,9 @@ impl GameOfLife {
             grid_line_vertical,
             grid_line_horizontal,
             cells: Self::generate_cells(30, cols, rows, cell_width, cell_height),
+            cells_next_life: vec![Cell::new(false); (cols * rows) as usize],
             cell_mesh,
+            mouse: Default::default(),
         }
     }
 
@@ -113,11 +119,14 @@ impl GameOfLife {
     fn set_cell(&mut self, x: usize, y: usize, alive: bool) {
         self.cells[(x+(y*self.cols)) as usize] = Cell::new(alive);
     }
+    fn set_next_life(&mut self, x: usize, y: usize, alive: bool) {
+        self.cells_next_life[(x+(y*self.cols)) as usize] = Cell::new(alive);
+    }
 
     /// find_neighbours of given co-ordinates
     fn find_neighbours(&self, x: usize, y: usize) -> i8 {
         let directions: HashMap<&'static str, (i8, i8)> = [
-            ("n", (0, 1)),
+            ("n", (0, -1)),
             ("ne", (1, -1)),
             ("e", (1, 0)),
             ("se", (1, 1)),
@@ -137,33 +146,40 @@ impl GameOfLife {
     }
 
     pub fn next(&mut self) {
-        let old_world = GameOfLife{
-            cells: self.cells.clone(),
-            cell_width: self.cell_width,
-            cell_height: self.cell_height,
-            cols: self.cols,
-            rows: self.rows,
-            grid_line_vertical: self.grid_line_vertical.clone(),
-            grid_line_horizontal: self.grid_line_horizontal.clone(),
-            cell_mesh: self.cell_mesh.clone(),
-        };
+
+        self.cells_next_life = vec![Cell::new(false); (self.cols * self.rows) as usize];
 
         for x in 0..self.cols {
             for y in 0..self.rows {
-                let count = old_world.find_neighbours(x, y);
-                let cell = Cell::new(old_world.get_cell(x, y));
+                let count = self.find_neighbours(x, y);
+                let cell = Cell::new(self.get_cell(x, y));
                 let alive = cell.next_state(count);
-                self.set_cell(x, y, alive);
+                self.set_next_life(x, y, alive);
             }
         }
+
+        self.cells = self.cells_next_life.clone();
     }
 
 }
 
 impl EventHandler for GameOfLife {
-    fn update(&mut self, _ctx: &mut Context) -> GameResult<()> {
+    fn update(&mut self, ctx: &mut Context) -> GameResult<()> {
         // Update code here...
         self.next();
+
+        if input::mouse::button_pressed(ctx, input::mouse::MouseButton::Left) {
+            if input::mouse::position(ctx) != self.mouse.relative_position() {
+                self.mouse.set_position(input::mouse::position(ctx));
+                let mouse_position = self.mouse.grid_position(self.cell_width as f32, self.cell_height as f32);
+                println!("button pressed x: {}, y: {}", mouse_position.x, mouse_position.y);
+
+                let (x, y) = (mouse_position.x as usize, mouse_position.y as usize);
+                if self.is_inside(x, y) {
+                    self.set_cell(x, y, true);
+                }
+            }
+        }
 
         Ok(())
     }
@@ -173,11 +189,11 @@ impl EventHandler for GameOfLife {
 
         // Draw code here...
         for tile_size in 0..self.cols {
-            let bounds = graphics::DrawParam::default().dest(Point2::new((tile_size * self.cell_width) as f32, 0.0));
+            let bounds = graphics::DrawParam::default().dest(Point2{x:(tile_size * self.cell_width) as f32, y:0.0});
             graphics::draw(ctx, &self.grid_line_vertical, bounds)?;
 
             let bounds = graphics::DrawParam::default()
-                .dest(Point2::new(0.0, (tile_size * self.cell_height) as f32));
+                .dest(Point2{x:0.0, y:(tile_size * self.cell_height) as f32});
             graphics::draw(ctx, &self.grid_line_horizontal, bounds)?;
         }
 
@@ -187,7 +203,7 @@ impl EventHandler for GameOfLife {
                 let alive = self.get_cell(x,y);
                 if alive {
                     let bounds = graphics::DrawParam::default()
-                        .dest(Point2::new((x*self.cell_width) as f32, (y*self.cell_height) as f32));
+                        .dest(Point2{x: (x*self.cell_width) as f32, y: (y*self.cell_height) as f32});
                     graphics::draw(ctx, &self.cell_mesh, bounds)?;
                 }
             }
